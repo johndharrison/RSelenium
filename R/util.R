@@ -162,10 +162,10 @@ getFirefoxProfile <- function(profDir, useBase = FALSE) {
 #' The data dir has a number of default locations
 #' \describe{
 #' \item{Windows XP}{
-#' Google Chrome: C:/Documents and Settings/\%USERNAME\%/Local Settings/Application Data/Google/Chrome/User Data
+#' Google Chrome: C:/Documents and Settings/%USERNAME%/Local Settings/Application Data/Google/Chrome/User Data
 #' }
 #' \item{Windows 8 or 7 or Vista}{
-#' Google Chrome: C:/Users/\%USERNAME\%/AppData/Local/Google/Chrome/User Data
+#' Google Chrome: C:/Users/%USERNAME%/AppData/Local/Google/Chrome/User Data
 #' }
 #' \item{Mac OS X}{
 #' Google Chrome: ~/Library/Application Support/Google/Chrome
@@ -208,8 +208,8 @@ getChromeProfile <- function(dataDir, profileDir) {
 #' @param pjs_cmd The name, full or partial path of a phantomjs
 #'    executable. This is optional only state if the executable is not in
 #'    your path.
-#' @param port An integer giving the port on which phantomjs will listen.
-#'    Defaults to 4444. format [[<IP>:]<PORT>]
+#' @param port An integer giving the port number on which phantomjs will listen.
+#'    Defaults to `4444`.
 #' @param extras An optional character vector: see 'Details'.
 #' @param ... Arguments to pass to \code{\link{system2}}
 #' @export
@@ -381,4 +381,65 @@ print.rsClientServer <- function(x, ...) {
   }
   cat("\n$server\n")
   print(x[["server"]][["process"]], ...)
+}
+
+#' Get latest ChromeDriver version number for a specific Google Chrome /
+#' Chromium release
+#'
+#' This function adheres to the version detection principles [specified by
+#' the ChromeDriver project](https://chromedriver.chromium.org/downloads/version-selection).
+#'
+#' @param version A Google Chrome / Chromium version number consisting of major
+#'   -- and optionally minor, and build -- version number(s). A character scalar.
+#' @return A character scalar.
+#' @examples
+#' latestChromeDriver("87")
+#' latestChromeDriver("87.0.4280")
+latestChromeDriver <- function(version) {
+  httr::content(
+    httr::RETRY(verb = "GET",
+                times = 5L,
+                url = paste0("https://chromedriver.storage.googleapis.com/LATEST_RELEASE_",
+                             version)),
+    encoding = "UTF-8")
+}
+
+#' Get installed stable Google Chrome version
+#'
+#' This function returns the first three elements of the (usually) four-element-long
+#' version number of the stable Google Chrome binary detected on the system.
+#'
+#' @return A character scalar.
+systemChromeVersion <- function() {
+  if (xfun::is_unix()) {
+    chrome_version <- system2(
+      command = ifelse(xfun::is_macos(),
+                       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                       "google-chrome-stable"),
+      args = "--version",
+      stdout = TRUE,
+      stderr = TRUE
+    )
+    chrome_version <- stringr::str_extract(string = chrome_version,
+                                           pattern = "(?<=Chrome )(\\d+\\.){2}\\d+")
+
+    # on Windows a plattform-specific bug prevents us from calling the
+    # Google Chrome binary directly to get its version number
+    # cf. https://bugs.chromium.org/p/chromium/issues/detail?id=158372
+  } else if (xfun::is_windows()) {
+    chrome_version <- system2(
+      command = "wmic",
+      args = 'datafile where name="C:\\\\Program Files (x86)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe" get Version /value',
+      stdout = TRUE,
+      stderr = TRUE
+    )
+    chrome_version <- stringr::str_extract(string = chrome_version,
+                                           pattern = "(?<=Version=)(\\d+\\.){2}\\d+")
+
+  } else {
+    warning("Your OS couldn't be determined (Linux, macOS, Windows) or is not supported.")
+    chrome_version <- character()
+  }
+  # ensure we return `character(0)` if Google Chrome is not installed/found
+  chrome_version[!is.na(chrome_version)]
 }
